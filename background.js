@@ -118,9 +118,24 @@ async function fetchText(url) {
 
 const unesc = (s) => s.replace(/\\u003d/g, "=").replace(/\\u0026/g, "&").replace(/&amp;/g, "&");
 
+// 从 begin 页 HTML 里切出 devicephoneverification/begin?... 这一段。
+// 刻意不使用含转义字符的正则：改用 indexOf + 逐个分隔符截断，避免反斜杠/引号在转义时被打坏。
 function pickBeginPath(html) {
-  const m = html.match(/devicephoneverification\/begin\?[^"'\s<>\\]+/);
-  return m ? unesc(m[0]).replace(/&quot;.*$/, "") : "";
+  const KEY = "devicephoneverification/begin?";
+  const i = html.indexOf(KEY);
+  if (i < 0) return "";
+  const QUOTE = String.fromCharCode(34);  // 双引号
+  const SQUOTE = String.fromCharCode(39); // 单引号
+  const BSLASH = String.fromCharCode(92); // 反斜杠
+  const LF = String.fromCharCode(10);
+  const TAB = String.fromCharCode(9);
+  const CR = String.fromCharCode(13);
+  let seg = html.slice(i);
+  for (const sep of [QUOTE, SQUOTE, BSLASH, "<", ">", " ", LF, TAB, CR]) {
+    const k = seg.indexOf(sep);
+    if (k >= 0) seg = seg.slice(0, k);
+  }
+  return unesc(seg).replace(/&quot;.*$/, "");
 }
 
 function pickTokens(html, srcUrl) {
@@ -386,10 +401,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 // 目标：不碰系统鼠标键盘，全部在浏览器内部用 DOM/脚本推进整条链路。
 // 默认 false —— 见 README「手动模式」一节。
 const cfg = {
-  account: "",        // 填你的 Google 账号前缀（@ 之前那一段）
-  pwd: "",            // 填你的 Google 密码
-  dial: "",           // 国际区号，例如 57 / 55 / 1
-  national: "",       // 本地号码（不含区号）
+  account: "",         // 填你的 Google 账号前缀（@ 之前那一段）
+  pwd: "",             // 填你的 Google 密码
+  dial: "",            // 国际区号，例如 57 / 55 / 1
+  national: "",        // 本地号码（不含区号）
   autoFill: false,     // true = 短信页自动填号并提交
 };
 const flow = { enabled: false, allowCreate: false, busy: false, last: "", log: [] };
@@ -419,7 +434,9 @@ function pageStep(c) {
       document.querySelectorAll("[data-identifier], li, div[role='link'], a[href*='signin']")
     );
     const hit = rows.find((e) =>
-      ((e.getAttribute("data-identifier") || "") + " " + (e.textContent || "")).toLowerCase().includes(String(c.account || "").toLowerCase())
+      ((e.getAttribute("data-identifier") || "") + " " + (e.textContent || ""))
+        .toLowerCase()
+        .includes(String(c.account || "").toLowerCase())
     );
     if (hit) {
       hit.click();
