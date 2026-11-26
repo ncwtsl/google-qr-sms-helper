@@ -37,13 +37,13 @@ Google 对部分账号（尤其是新账号、机房 IP、Cloud Shell 场景）�
 **① 叠串（18 位号码）**
 
 旧写法是「切国家 → 清空 → 只填本地号」。问题在于号码框每次 `input` 都会重排值，
-清空那一下就把旧值规范化写回，于是 `+57 522457573186522457` 这种垃圾串就诞生了。
+清空那一下就把旧值规范化写回，于是 `+57 000000000000000000` 这种垃圾串就诞生了。
 
 现在的写法：
 
 ```js
 const digits = raw.replace(/[^\d]/g, "");
-const full = "+" + digits;                     // +573000000000
+const full = "+" + digits;                     // 完整国际号
 field.focus();
 setNative(field, "");                           // 先清空
 await new Promise(r => setTimeout(r, 180));     // 等受控输入重排完
@@ -167,7 +167,7 @@ SW 侧命令（`background.js` 的 `bridgeTick`）：
 manifest.json          扩展清单（MV3）
 background.js          service worker：RPC 降级、UA 规则、后台流水线、CDP 调试桥
 content.js             页面面板：识别二维码、手动降级、短信页填号
-a.jsp / ua_spoof.js    验证链路内的 navigator 伪装（MAIN world）
+ua_spoof.js            验证链路内的 navigator 伪装（MAIN world）
 scripts/fetch-jsqr.ps1 可选依赖：拉取 jsQR
 docs/使用说明.md       详细说明、实测数据、报错对照表
 ```
