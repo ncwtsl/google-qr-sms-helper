@@ -119,8 +119,8 @@ async function fetchText(url) {
 const unesc = (s) => s.replace(/\\u003d/g, "=").replace(/\\u0026/g, "&").replace(/&amp;/g, "&");
 
 function pickBeginPath(html) {
-  const m = html.match(/devicephoneverification\/begin\?[^"'\s<>\\] +/);
-  return m ? m[0] : "";
+  const m = html.match(/devicephoneverification\/begin\?[^"'\s<>\\]+/);
+  return m ? unesc(m[0]).replace(/&quot;.*$/, "") : "";
 }
 
 function pickTokens(html, srcUrl) {
