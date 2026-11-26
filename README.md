@@ -1,124 +1,194 @@
-# Google QR SMS Helper (`google-qr-sms-helper`)
+# google-qr-sms-helper（ncw fork · v2.20.0）
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Manifest-V3-1a73e8?style=flat-square&logo=googlechrome&logoColor=white" alt="Manifest V3" />
-  <img src="https://img.shields.io/badge/Version-1.1.0-34a853?style=flat-square" alt="Version 1.1.0" />
-  <img src="https://img.shields.io/badge/License-MIT-fbbc04?style=flat-square" alt="MIT License" />
-  <img src="https://img.shields.io/badge/Platform-Chrome%20%7C%20Edge%20%7C%20Brave-ea4335?style=flat-square" alt="Platform" />
-</p>
+> 把 Google 的「二维码跨设备验证」降级回「6 位短信验证码」的 Chrome / Edge 扩展（Manifest V3）。
+> 这是 [havenicec/google-qr-sms-helper](https://github.com/havenicec/google-qr-sms-helper) 的 fork，
+> 在 v1.1.0 基础上做了**手动化改造**与**填号逻辑重写**，并沉淀了一整套浏览器内调试设施。
 
-<p align="center">
-  <b>将 Google 桌面端强制跨设备扫码验证（MO-SMS / GMS Constellation）一键降级回传统的「输入手机号接收 6 位短信验证码」流程。</b><br/>
-  Switch Google's mandatory cross-device QR verification back to standard 6-digit SMS / Voice verification on desktop browsers.
-</p>
+🇨🇳 详细使用说明与踩坑记录见 **[docs/使用说明.md](docs/使用说明.md)**。
 
 ---
 
-## 📦 一、安装教程 (Installation)
+## 它解决什么问题
 
-### 方式 1：直接下载 Release 压缩包（推荐新手）
-1. 前往本仓库的 **[Releases 页面](https://github.com/havenicec/google-qr-sms-helper/releases/latest)**，下载最新的 `google-qr-sms-helper-v1.1.0.zip` 并解压到本地文件夹。
-2. 打开 Chrome / Edge / Brave 浏览器，在地址栏输入 `chrome://extensions/` 并回车。
-3. 打开页面右上角的 **「开发者模式 (Developer mode)」** 开关。
-4. 点击左上角的 **「加载已解压的扩展程序 (Load unpacked)」**，选中刚才解压出来的文件夹即可完成安装。
+Google 对部分账号（尤其是新账号、机房 IP、Cloud Shell 场景）强制要求用**另一台手机扫码**才能继续验证。
+这个扩展利用 `devicephoneverification` 链路的 batchexecute RPC（`MypxBd` → `consent` → `YDtwf`），
+让服务端返回回落标记 `[3,null,4]`，从而把页面换成传统的**短信验证码**流程。
 
-### 方式 2：通过 Git 克隆安装
-```bash
-git clone https://github.com/havenicec/google-qr-sms-helper.git
-```
-然后在 `chrome://extensions/` 中开启「开发者模式」，点击「加载已解压的扩展程序」并选择 `google-qr-sms-helper` 目录。
+全程不碰系统鼠标键盘，所有动作发生在浏览器内部。
 
 ---
 
-## 🚀 二、保姆级图文使用教程 (Step-by-Step Usage Guide)
+## 相对上游的改动（v1.1.0 → v2.20.0）
 
-> [!IMPORTANT]
-> **核心前提（必看）**：**不要**直接从第三方客户端（如 Antigravity / Gemini Code Assist 授权页）弹出的二维码页面降级（因为其 `continue` 参数包含多层嵌套重定向，会被 Google 重新拦截回二维码）。  
-> **必须先打开 Google Cloud Console 通过 Cloud Shell 唤出原生的 `Verify` 窗口**！在这里过完一次短信验证后，你的 Google 账号权限将全局解锁，再回 Antigravity 等工具登录即可直接丝滑通过。
+| 版本 | 改动 | 为什么 |
+|---|---|---|
+| 2.8 | DNR 的 UA 伪装从「全站 iPad」收窄到 3 条验证链路规则 | 铺满 `accounts.google.com/*` 会让登录页被判「此浏览器或应用可能不安全」→ `/v3/signin/rejected` |
+| 2.12 | `webNavigation` 导航完成后主动补注入 content script | Google 是重定向链 + SPA 路由，`document_idle` 常只在中间页触发，落到二维码页时面板就没了 |
+| **2.14.1** | **`pageStep` 用 `location.pathname` 而不是 `url` 判断页面** | 所有挑战页 URL 都带 `flowEntry=AddSession`，用 url 匹配会把二维码页/密码页/短信页全误判成「账号选择器」→ 返回 `no-account`，**从不降级**（这就是「插件一直没反应」的真因） |
+| 2.15 | 后台流水线只使用自己 `tabs.create` 的后台标签 | 绝不碰用户正在用的标签页 |
+| 2.17 | 调试桥改用 `chrome.debugger` 的 CDP 域 | `chrome.scripting.executeScript` + `eval()` 会被页面 CSP 拦（`'unsafe-eval' is not an allowed source`） |
+| 2.18.1 | 增加 `chrome.alarms` 保活 | MV3 的 service worker 空闲被回收后，`setInterval` 不会唤醒它；`alarms` 会 |
+| 2.18.3 | `bAttach` 失败时不再错误地标记为已 attach | 否则后续所有 CDP 命令报 `Debugger is not attached to the tab` |
+| **2.19** | **默认不自动降级、不自动填号** | 自动跑会在用户还没看清页面时就消耗掉二维码/号码配额 |
+| **2.20** | **填号改为「一次性插完整国际号」+ 面板默认收起** | `input#phoneNumberId` 是受控输入，清空动作本身会触发 Google 回填 `+国家码`，与随后插入的数字叠成 18 位 → 报「出了点问题」 |
 
-### 第 1 步：打开 Google Cloud Console 并唤起 Cloud Shell 验证
-1. 在浏览器中登录你需要验证的 Google 账号，访问 **[https://console.cloud.google.com/](https://console.cloud.google.com/)**。
-2. 如下图所示，点击页面右上角导航栏的 **「激活 Cloud Shell」终端图标 `[>_]`**（或者直接点击页面右下角插件悬浮窗里的 **`1. 自动点击 Cloud Shell 终端图标`** 按钮）。
-3. 在底部弹出的 `Verify your account` 窗口中，点击蓝色的 **`Verify`** 按钮：
+### 2.20 的两个关键修复
 
-![Cloud Shell Verify 入口示意](./assets/cloud-shell-verify.png)
+**① 叠串（18 位号码）**
 
----
+旧写法是「切国家 → 清空 → 只填本地号」。问题在于号码框每次 `input` 都会重排值，
+清空那一下就把旧值规范化写回，于是 `+57 522457573186522457` 这种垃圾串就诞生了。
 
-### 第 2 步：在二维码页面点击「一键降级到短信选择框」
-1. 点击 `Verify` 后，会弹出 Google 的二维码验证页面（`/v3/signin/challenge/iap/qrcode`）。
-2. 等待二维码图片加载出来后，点击页面右下角插件悬浮面板上的 **「⚡ 一键降级到短信选择框」** 按钮：
-   - 插件会自动调用浏览器原生 `BarcodeDetector` 识别页面上的二维码；
-   - 自动在后台向 Google 发送 `MypxBd` 与 `YDtwf ([null, uuid, dsh, 7, null, tl, false])` 数据包，拿到 `[3, null, 4]`（非 Android 设备回退短信验证状态）；
-   - 自动将当前标签页的请求头与环境伪装为 **`iPad Mini`**（无需手动按 F12 切换设备），并重定向到 `uplevelingstep/selection?...&idv_xdevice=1`。
+现在的写法：
 
----
-
-### 第 3 步：选择「短信 (Text message)」并输入手机号接码
-1. 页面会自动跳转进带有单选框的 **验证方式选择页 (`/uplevelingstep/selection`)**：
-   - 勾选 **Text message (SMS) / 短信**（或语音通话），点击下一步。
-2. 在手机号输入框中填入你的接码手机号（支持任意国家/地区的接码平台号码或实体卡号），点击发送验证码。
-3. 收到 `G-xxxxxx` 的 6 位数字验证码后填入并点击 **Next**，即可完成账号验证！
-4. 验证通过后，回到 Cloud Shell 或 Antigravity / Gemini CLI 刷新即可正常使用。
-
----
-
-## ❓ 三、常见问题与避坑指南 (FAQ & Troubleshooting)
-
-### Q1: 为什么我从别的链接点进二维码页，点降级后又跳回了二维码？
-- **原因**：只有从 `https://console.cloud.google.com/` 点击右上角 **Cloud Shell `[>_]` -> `Verify`** 唤出的二维码页，其 `continue` 参数才是纯净的 `https://accounts.google.com/uplevelingstep/selection?TL=...&authuser=0&flowName=GlifWebSignIn&sarp=1&scc=1`。请务必按「第 1 步」从 Cloud Shell 入口进入。
-
-### Q2: 为什么插件默认伪装成 `iPad Mini` 而不是 `iPad Pro` 或桌面浏览器？
-- **原因**：Google 的 `uplevelingstep/selection` 接口会校验 `User-Agent`：
-  - 桌面端（Windows / macOS）以及 Chrome F12 中的 `iPad Pro 13` 发送的都是 `Macintosh; Intel Mac OS X` 桌面级 UA，Google 检测到桌面环境会无视 `idv_xdevice=1` 强行跳回二维码。
-  - 而 `iPad Mini` 发送的是纯移动端 `iPad; CPU OS 16_6 like Mac OS X ... Mobile/15E148` 请求头，且在提交 6 位验证码的 `/_/IdvUplevelingUi/data/batchexecute` 接口上必须保持前后完全一致的 `iPad Mini` 请求头（已在 v1.1.0 中通过 `declarativeNetRequest` 全路径自动覆盖，无需手动开 F12）。
-
-### Q3: 点击「一键降级」提示“未能在当前页面识别到二维码”怎么办？
-- 请确认使用的是 **Chrome / Edge 88+** 浏览器（支持原生 `BarcodeDetector` 接口），并等待页面上的黑色二维码图案完全显示后再点击按钮。
-
----
-
-## ✨ 四、技术原理与工作流 (Architecture & Workflow)
-
-```mermaid
-sequenceDiagram
-    participant U as Desktop Browser (User)
-    participant E as Extension (Content + DNR)
-    participant B as Background Service Worker
-    participant G as Google Identity Backend
-
-    U->>G: 1. Trigger Verify from Cloud Console (Cloud Shell)
-    G-->>U: Render /v3/signin/challenge/iap/qrcode
-    U->>E: 2. Click "⚡ 一键降级到短信选择框"
-    E->>E: Decode QR Canvas/Image via native BarcodeDetector
-    E->>B: Send QR URL (devicephoneverification/begin)
-    B->>G: POST MypxBd (SelectNextVerificationMethod -> consent)
-    B->>G: GET /devicephoneverification/consent (extract request UUID)
-    B->>G: POST YDtwf [null, uuid, dsh, 7, null, tl, false]
-    G-->>B: Return ["wrb.fr", "YDtwf", "[3, null, 4]"] (Non-Android Fallback)
-    B-->>E: Fallback state locked
-    E->>G: Redirect to uplevelingstep/selection?...&idv_xdevice=1 (with iPad Mini UA)
-    G-->>U: Render SMS / Voice Radio Selection & 6-Digit Code Input
+```js
+const digits = raw.replace(/[^\d]/g, "");
+const full = "+" + digits;                     // +573000000000
+field.focus();
+setNative(field, "");                           // 先清空
+await new Promise(r => setTimeout(r, 180));     // 等受控输入重排完
+field.execCommand ... ;                          // 再一次性插完整国际号
 ```
 
+Google 会自己解析 `+…` 并把国家选择器切过去，**不需要也不应该手动切国家**
+（页面上的国家选择器是 `div[role=combobox]`，根本不是原生 `<select>`）。
+
+**② 「出了点问题 · 抱歉，出了点问题。请重试。」**
+
+这是 Google 的**通用风控报错**，不是扩展 bug。实测下来它至少有三种含义：
+
+| 现象 | 实际含义 |
+|---|---|
+| 号码格式不对 / 叠串 | 提交前就能自查（本扩展会先校验长度，不对就不提交） |
+| 号码被判定为虚拟号 / 接码号 | 换国家或号段 |
+| 账号已被停用 | 会重定向到 `/v3/signin/speedbump/disabled/*`，要求申诉 |
+| 出口 IP 是机房 IP | 换住宅 IP 后同类提交会变成「此号码用于验证的次数过多」这类精确报错 |
+
+`content.js` 里的 `watchDialog()` 会实时识别这个弹窗，并把上述归因打印到面板上。
+
 ---
 
-## 📁 目录结构 (Project Structure)
+## 安装
 
-```text
-google-qr-sms-helper/
-├── assets/
-│   └── cloud-shell-verify.png  # Cloud Shell Verify 入口示意图
-├── manifest.json               # Chrome Extension Manifest V3 配置文件
-├── background.js               # DNR 全路径 iPad Mini 请求头伪装 + [3,null,4] RPC 注入
-├── content.js                  # 悬浮控制面板 + BarcodeDetector 二维码识别 + URL 清洗跳转
-├── ua_spoof.js                 # Main-world navigator 属性对齐
-├── LICENSE                     # MIT 开源协议
-└── README.md                   # 项目说明与图文教程
+**方式一：加载已解压的扩展（推荐，适合自己改）**
+
+1. 打开 `chrome://extensions/`（Edge 是 `edge://extensions/`）
+2. 打开右上角「开发者模式」
+3. 点「加载已解压的扩展程序」，选中本仓库根目录
+
+**方式二：打包成 crx**
+
+```bat
+msedge.exe --pack-extension="<本仓库目录>" --pack-extension-key="<你的.pem>"
+```
+
+> ⚠️ `.pem` 是扩展签名私钥，**不要提交到仓库**（本仓库的 `.gitignore` 已排除）。
+
+### 可选：启用 jsQR
+
+`content.js` 解二维码时**优先用浏览器的 `BarcodeDetector`**，只有它不可用才回落 jsQR。
+为了不把 130KB 第三方库塞进仓库，jsQR 默认不打包：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\fetch-jsqr.ps1
+```
+
+脚本会把 `jsqr.min.js` 拉到根目录，并自动加回 `manifest.json` 的 `content_scripts`。
+
+---
+
+## 使用
+
+1. 走到 Google 的二维码验证页（`/v3/signin/challenge/iap/qrcode`）
+2. 右下角会出现一个 **⚡ 圆点**，点开面板（默认收起，就是为了不遮住「下一步」）
+3. 点 **「⚡ 手动降级到短信页」**
+4. 成功后页面自动跳转到 `/challenge/iap?idv_xdevice=1`（短信方式选择页）
+5. 在短信页把接码号填进面板输入框，点 **「填入号码并点下一步」**
+6. 收到 6 位码后手动填入
+
+**注意**：同一张二维码只能用一次。连续点「降级」会把会话消耗掉，
+此时面板会提示「二维码会话已失效…按 F5 刷新」。
+
+### 无人值守模式（可选）
+
+默认关闭。需要自动跑时，显式打开：
+
+```js
+sessionStorage.qrsms_auto = "1";     // 二维码页允许自动降级一次
+chrome.storage.local.set({ qrsms_flow: true });   // 允许后台流水线
+```
+
+后台流水线的账号/密码/号码在 `background.js` 的 `cfg` 里，**默认全空**，需要你自己填。
+这些值会跟着扩展源码走，**不要提交进仓库**。
+
+---
+
+## 调试设施（可选，不影响功能）
+
+这个 fork 附带一套「用 HTTP 指挥浏览器」的本地桥，全部只监听 `127.0.0.1`，
+没有安装接收端时所有请求静默失败。
+
+SW 侧命令（`background.js` 的 `bridgeTick`）：
+
+| 命令 | 作用 |
+|---|---|
+| `eval` | 在页面里执行一段函数体（`Runtime.evaluate`，绕 CSP） |
+| `click` | CDP 三段式鼠标点击（moved → pressed → released） |
+| `insert` | 输入文本，可选 `clear`（真 Ctrl+A + Backspace）与 `focus` |
+| `key` | 发送按键（如 `Enter`） |
+| `focus` | `DOM.focus` 到指定选择器（密码框必须走这条，`.focus()` 无效） |
+| `cdp` | 透传任意 CDP `method` / `params` |
+| `shot` | `Page.captureScreenshot` → POST 到本地 sink |
+| `nav` / `tabs` / `ver` / `reload` / `detach` | 导航、列标签、查版本、重载扩展、断开调试 |
+
+几个实测结论：
+
+- **CDP 坐标 = CSS 像素**，不要乘 `devicePixelRatio`
+- 点击 Google 的账号行，`Input.dispatchMouseEvent` 无效，必须 `element.click()`
+- 密码框 `input[type=password].focus()` 无效（`activeElement` 是 `IFRAME`），要 `DOM.focus` + `Input.insertText`
+- Google 会用一个全屏 `div.ZQxJQe`（`pointer-events:auto`、`opacity:.5`）当 loading scrim，把点击全吞掉
+- reCAPTCHA 的 anchor iframe 首次 rect 可能是 0，重新导航一次才会渲染；勾选框坐标 = anchor rect + (26,26)
+- **reCAPTCHA 图片题无法用脚本通过**（靠行为指纹判分），这一步只能人工点
+
+---
+
+## 已知限制
+
+- **出口 IP 信誉比代码重要得多。** 机房 IP（AWS / Azure / GCP）下 reCAPTCHA 必出图片题、号码必被拒；
+  换到非云 ISP 的节点后，勾选框点一下就过、报错也从「出了点问题」变成精确的号码侧提示。
+- Google 的前端是编译过的 Closure 代码，class 名（`ZQxJQe`、`YPqjbf`）会随版本变，选择器都已做多重兜底。
+- 短信验证的号码配额是按号码+IP+账号一起算的，接码平台的公共号段命中率随时间下降很快。
+
+---
+
+## 目录
+
+```
+manifest.json          扩展清单（MV3）
+background.js          service worker：RPC 降级、UA 规则、后台流水线、CDP 调试桥
+content.js             页面面板：识别二维码、手动降级、短信页填号
+a.jsp / ua_spoof.js    验证链路内的 navigator 伪装（MAIN world）
+scripts/fetch-jsqr.ps1 可选依赖：拉取 jsQR
+docs/使用说明.md       详细说明、实测数据、报错对照表
 ```
 
 ---
 
-## 📄 License
+## 许可与声明
 
-Released under the [MIT License](./LICENSE).
+继承上游的 `LICENSE`。本项目仅用于**自己账号的登录**与浏览器自动化技术研究，
+请勿用于批量注册、绕过平台风控牟利等场景。
+
+---
+
+## English summary
+
+A Chrome/Edge MV3 extension that downgrades Google's mandatory QR-code cross-device
+verification back to standard 6-digit SMS verification, by driving the
+`devicephoneverification` batchexecute RPC (`MypxBd` → `consent` → `YDtwf`) and
+checking for the `[3,null,4]` fallback marker.
+
+This fork (v2.20.0) makes everything **manual by default** (no auto-downgrade, no
+auto-submit), fixes the 18-digit phone-number concatenation bug caused by Google's
+controlled input, keeps the panel collapsed so it never covers Google's Next button,
+and ships an optional local CDP debug bridge over `127.0.0.1`.
