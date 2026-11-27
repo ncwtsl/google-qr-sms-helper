@@ -6,6 +6,13 @@
 
 🇨🇳 详细使用说明与踩坑记录见 **[docs/使用说明.md](docs/使用说明.md)**。
 
+> [!IMPORTANT]
+> **登录界面也能降级验证**，不只是 Cloud Shell / 第三方授权页弹出来的二维码。
+> 在 `accounts.google.com` 输完密码后出现的扫码页（`/v3/signin/challenge/iap/qrcode`）同样点 ⚡ →「手动降级到短信页」即可。
+> 详见 **[docs/使用说明.md · 第零节](docs/使用说明.md#零登录界面也能降级验证最重要)**。
+
+> 📖 第一次上手先看 **[附录 A：原作者使用教程](docs/使用说明.md#附录-a原作者使用教程havenicec-v110-原版)**。
+
 ---
 
 ## 它解决什么问题
@@ -99,7 +106,7 @@ powershell -ExecutionPolicy Bypass -File scripts\fetch-jsqr.ps1
 
 ## 使用
 
-1. 走到 Google 的二维码验证页（`/v3/signin/challenge/iap/qrcode`）
+1. 走到 Google 的二维码验证页（`/v3/signin/challenge/iap/qrcode`）—— **普通登录界面弹出的扫码页同样适用**，不用非得从 Cloud Shell 进
 2. 右下角会出现一个 **⚡ 圆点**，点开面板（默认收起，就是为了不遮住「下一步」）
 3. 点 **「⚡ 手动降级到短信页」**
 4. 成功后页面自动跳转到 `/challenge/iap?idv_xdevice=1`（短信方式选择页）
