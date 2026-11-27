@@ -78,7 +78,7 @@ setupRules();
 // Google 的登录/验证链路是「重定向链 + SPA 路由」，document_idle 的 content script 经常只在中间页
 // 触发一次，落到 /challenge/iap/qrcode 这个最终页时面板就没了（用户看到的就是"插件没反应"）。
 // 这里在导航/路由完成后主动补注入一次；content.js 自己有 __qrsmsPanelMounted 去重。
-const INJECT_URLS = [/\/challenge\/iap\/(qrcode|uplevelingstep)/, /\/uplevelingstep/, /\/challenge\/iap(\?|$)/];
+const INJECT_URLS = [/\/challenge\/(iap|ipp)\/(qrcode|uplevelingstep)/, /\/uplevelingstep/, /\/challenge\/(iap|ipp)(\?|$)/];
 function maybeInject(details) {
   if (details.frameId !== 0) return;
   const url = details.url || "";
@@ -488,12 +488,12 @@ function pageStep(c) {
     return out;
   }
 
-  if (/\/challenge\/iap\/qrcode/.test(url)) {
+  if (/\/challenge\/(iap|ipp)\/qrcode/.test(url)) {
     out.action = "qr-page";
     return out;
   }
 
-  if (/\/challenge\/(iap|uplevelingstep)/.test(url)) {
+  if (/\/challenge\/(iap|ipp|uplevelingstep)/.test(url)) {
     // 默认不自动填号、不自动提交 —— 全部交给面板按钮（用户要求手动）
     if (!c.autoFill) {
       out.action = "sms-manual";
@@ -834,6 +834,12 @@ async function bridgeTick() {
       const q = await bCmd(tb2.id, "DOM.querySelector", { nodeId: doc.root.nodeId, selector: String(c.selector) });
       if (!q.nodeId) out = { ok: false, data: "no node for " + c.selector };
       else out = (await bCmd(tb2.id, "DOM.focus", { nodeId: q.nodeId }), { ok: true, data: "focused " + c.selector });
+    } else if (c.cmd === "inject") {
+      // 不刷新页面地补注入 content.js：刷新会换掉 TL 令牌、废掉当前二维码，所以改完代码用这个热更新
+      const tb3 = await bFindTab(c);
+      const files = Array.isArray(c.files) && c.files.length ? c.files : ["jsqr.min.js", "content.js"];
+      await chrome.scripting.executeScript({ target: { tabId: tb3.id, frameIds: [0] }, files });
+      out = { ok: true, data: "injected " + files.join(",") };
     } else if (c.cmd === "tabs") {
       const all = await chrome.tabs.query({});
       out = { ok: true, data: all.map((t) => ({ id: t.id, active: t.active, url: (t.url || "").slice(0, 160) })) };

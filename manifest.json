@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Google QR 自动降级短信助手",
-  "version": "2.20.0",
+  "version": "2.20.1",
   "description": "识别 Google 验证二维码 → 用 begin/initiate 页令牌发 MypxBd/YDtwf 拿 [3,null,4] → 跳短信验证方式页（含会话失效检测）",
   "minimum_chrome_version": "111",
   "permissions": [

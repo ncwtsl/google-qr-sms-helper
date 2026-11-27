@@ -2,9 +2,11 @@
   "use strict";
 
   const isCloudConsole = location.hostname === "console.cloud.google.com";
-  const isQrPage = location.pathname.includes("/challenge/iap/qrcode");
-  // 降级成功后落在 /challenge/iap?idv_xdevice=1（短信页）：只挂提示，不干预跳转
-  const isSmsPage = !isQrPage && /\/challenge\/(iap|uplevelingstep)/.test(location.pathname);
+  // Google 的挑战路径段会在 iap / ipp 之间切换（2026-11 实测新账号落到 /challenge/ipp/qrcode），
+  // 只认 iap 会让整个脚本在第 8 行 return —— 页面上连圆点都不出现，用户看到的就是"插件没反应"。
+  const isQrPage = /\/challenge\/(iap|ipp)\/qrcode/.test(location.pathname);
+  // 降级成功后落在 /challenge/(iap|ipp)?idv_xdevice=1（短信页）：只挂提示，不干预跳转
+  const isSmsPage = !isQrPage && /\/challenge\/(iap|ipp|uplevelingstep)/.test(location.pathname);
   if (!isCloudConsole && !isQrPage && !isSmsPage) return;
   if (window.__qrsmsPanelMounted) return;
   window.__qrsmsPanelMounted = true;
@@ -29,7 +31,7 @@
   const title = document.createElement("div");
   title.style.cssText =
     "font-weight:600;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:8px;";
-  title.textContent = "⚡ Google 验证降级助手 v2.20";
+  title.textContent = "⚡ Google 验证降级助手 v" + (() => { try { return chrome.runtime.getManifest().version; } catch (e) { return "?"; } })();
   const x = document.createElement("span");
   x.textContent = "×";
   x.title = "收起";
@@ -213,7 +215,7 @@
       return cont + (cont.includes("?") ? "&" : "?") + "idv_xdevice=1";
     }
     let t = stripParam(
-      location.href.replace("/challenge/iap/qrcode", "/challenge/iap"),
+      location.href.replace(/\/challenge\/(iap|ipp)\/qrcode/, "/challenge/$1"),
       "idv_xdevice"
     );
     return t + (t.includes("?") ? "&" : "?") + "idv_xdevice=1";

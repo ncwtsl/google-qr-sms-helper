@@ -1,4 +1,4 @@
-# google-qr-sms-helper（ncw fork · v2.20.0）
+# google-qr-sms-helper（ncw fork · v2.20.1）
 
 > 把 Google 的「二维码跨设备验证」降级回「6 位短信验证码」的 Chrome / Edge 扩展（Manifest V3）。
 > 这是 [havenicec/google-qr-sms-helper](https://github.com/havenicec/google-qr-sms-helper) 的 fork，
