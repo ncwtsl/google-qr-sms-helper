@@ -25,42 +25,7 @@ Google 对部分账号（尤其是新账号、机房 IP、Cloud Shell 场景）�
 
 ---
 
-## 相对上游的改动（v1.1.0 → v2.20.0）
-
-| 版本 | 改动 | 为什么 |
-|---|---|---|
-| 2.8 | DNR 的 UA 伪装从「全站 iPad」收窄到 3 条验证链路规则 | 铺满 `accounts.google.com/*` 会让登录页被判「此浏览器或应用可能不安全」→ `/v3/signin/rejected` |
-| 2.12 | `webNavigation` 导航完成后主动补注入 content script | Google 是重定向链 + SPA 路由，`document_idle` 常只在中间页触发，落到二维码页时面板就没了 |
-| **2.14.1** | **`pageStep` 用 `location.pathname` 而不是 `url` 判断页面** | 所有挑战页 URL 都带 `flowEntry=AddSession`，用 url 匹配会把二维码页/密码页/短信页全误判成「账号选择器」→ 返回 `no-account`，**从不降级**（这就是「插件一直没反应」的真因） |
-| 2.15 | 后台流水线只使用自己 `tabs.create` 的后台标签 | 绝不碰用户正在用的标签页 |
-| 2.17 | 调试桥改用 `chrome.debugger` 的 CDP 域 | `chrome.scripting.executeScript` + `eval()` 会被页面 CSP 拦（`'unsafe-eval' is not an allowed source`） |
-| 2.18.1 | 增加 `chrome.alarms` 保活 | MV3 的 service worker 空闲被回收后，`setInterval` 不会唤醒它；`alarms` 会 |
-| 2.18.3 | `bAttach` 失败时不再错误地标记为已 attach | 否则后续所有 CDP 命令报 `Debugger is not attached to the tab` |
-| **2.19** | **默认不自动降级、不自动填号** | 自动跑会在用户还没看清页面时就消耗掉二维码/号码配额 |
-| **2.20** | **填号改为「一次性插完整国际号」+ 面板默认收起** | `input#phoneNumberId` 是受控输入，清空动作本身会触发 Google 回填 `+国家码`，与随后插入的数字叠成 18 位 → 报「出了点问题」 |
-
-### 2.20 的两个关键修复
-
-**① 叠串（18 位号码）**
-
-旧写法是「切国家 → 清空 → 只填本地号」。问题在于号码框每次 `input` 都会重排值，
-清空那一下就把旧值规范化写回，于是 `+57 000000000000000000` 这种垃圾串就诞生了。
-
-现在的写法：
-
-```js
-const digits = raw.replace(/[^\d]/g, "");
-const full = "+" + digits;                     // 完整国际号
-field.focus();
-setNative(field, "");                           // 先清空
-await new Promise(r => setTimeout(r, 180));     // 等受控输入重排完
-field.execCommand ... ;                          // 再一次性插完整国际号
-```
-
-Google 会自己解析 `+…` 并把国家选择器切过去，**不需要也不应该手动切国家**
-（页面上的国家选择器是 `div[role=combobox]`，根本不是原生 `<select>`）。
-
-**② 「出了点问题 · 抱歉，出了点问题。请重试。」**
+## 关于「出了点问题 · 抱歉，出了点问题。请重试。」
 
 这是 Google 的**通用风控报错**，不是扩展 bug。实测下来它至少有三种含义：
 
